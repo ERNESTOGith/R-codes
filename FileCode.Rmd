@@ -1,0 +1,53 @@
+---
+title: "Rcodes"
+author: "ERNESTOGith"
+date: "2023-10-16"
+output: html_document
+---
+
+**1.BASICS OF R**
+
+***1.1 Calculating***
+```{r}
+#The square root of 256
+sqrt(256)
+
+#Calculate the cumulative sum of the numbers 2,3,4,5,6.
+cumsum(c(2, 3, 4, 5, 6))
+
+#Calculate the cumulative sum of those numbers, but in reverse order.
+cumsum(rev(c(2, 3, 4, 5, 6)))
+
+# Find 10 random numbers between 0 and 100, rounded to the nearest whole number.
+sample(0:100, 10)
+
+round(runif(10, 0, 100))
+```
+
+***1.2 Simple objects***
+```{r}
+#These codes assign numbers to objects x and y
+x <- 10
+y <- 20
+#Calculate the product of x and y
+x * y
+
+#Store the result in a new object called z
+z <- x * y
+z
+
+#Inspect your workspace by typing ls(), and by clicking the Environment tab in Rstudio, and find the three objects you created
+ls()
+
+#Make a vector of the objects x, y and z. Use this command
+myvec <- c(x,y,z)
+
+#Find the minimum, maximum, length, and variance of myvec.
+min(myvec)
+max(myvec)
+length(myvec)
+var(myvec)
+
+#Remove the myvec object from your workspace
+rm(myvec)
+```
