@@ -8,6 +8,7 @@ output: html_document
 **1.BASICS OF R**
 
 ***1.1 Calculating***
+
 ```{r}
 #The square root of 256
 sqrt(256)
@@ -25,6 +26,7 @@ round(runif(10, 0, 100))
 ```
 
 ***1.2 Simple objects***
+
 ```{r}
 #These codes assign numbers to objects x and y
 x <- 10
@@ -51,3 +53,20 @@ var(myvec)
 #Remove the myvec object from your workspace
 rm(myvec)
 ```
+
+***1.2 Working with a single vector***
+
+```{r}
+#The numbers below are the first ten days of rainfall amounts in 1996. Read them into a vector using the c() function (recall Section ?? on p. ??).0.1, 0.6, 33.8, 1.9, 9.6, 4.3, 33.7, 0.3, 0.0, 0.1
+
+rainfall <- c(0.1,0.6, 33.8, 1.9, 9.6, 4.3, 33.7, 0.3, 0.0, 0.1)
+
+#What was the mean rainfall, how about the standard deviation?
+mean(rainfall)
+sd(rainfall)
+
+#Which day saw the highest rainfall (write code to get the answer)?
+which.max(rainfall)
+
+```
+
