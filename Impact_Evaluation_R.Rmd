@@ -9,6 +9,12 @@ output: html_document
 library(dplyr)
 library(survey)
 library(foreign)  #For converting *.dta
+library(Matching)
+library(MatchIt)
+library(ggplot2)
+library(VIF)# install this package by hands
+library(nonrandom)# Install this package by hands also install lme4 package.
+library(car)
 ```
 
 
@@ -17,6 +23,9 @@ library(foreign)  #For converting *.dta
 ***Impact data***
 ```{r}
 hh_98.df <- read.dta("E:\\MOOC_FUN\\EVALUATION_IMPACT\\World Bank_impact_evaluation\\Rcodes_Impact_Evaluation\\hh_98.dta")
+
+hh_9198.df <- read.dta("E:\\MOOC_FUN\\EVALUATION_IMPACT\\World Bank_impact_evaluation\\Rcodes_Impact_Evaluation\\hh_9198.dta")
+
 
 
 ###################Subset###############
@@ -130,13 +139,175 @@ summary(progplace_3.svyglm)
 
 progplace_4.svyglm <- svyglm(lexptot ~ progvillf + sexhead + agehead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + oil + egg, design = des5)
 summary(progplace_4.svyglm)
+```
+
+**2.PROPENSITY SCORE MATCHING**
 
 
 
+###################Subset####################
+
+```{r}
+hh_98.df <- mutate(hh_98.df, lexptot = log(1 + exptot))%>%
+mutate(lnland = log((1 + hhland/100)))
+
+
+# First Regression (Unbalanced)
+
+des1 <- svydesign(id = ~nh,  weights = ~weight, data = hh_98.df)
+prog.lm <- svyglm(dmmfd ~ sexhead + agehead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + oil + egg, design=des1, family = quasibinomial(link = "probit"))   
+X <- prog.lm$fitted
+Tr <- hh_98.df$dmmfd
+Y <- hh_98.df$lexptot
+
+m.out <- Match(Tr = Tr, X = X, Y = Y, caliper = 0.001)
+summary(m.out)
+
+MatchBalance(dmmfd ~ sexhead + agehead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + oil + egg, data = hh_98.df, nboots = 500, ks = TRUE)
+
+fit <- prog.lm$data
+fit$fvalues <- prog.lm$fitted.values 
+
+fit.control <- filter(fit, dmmfd == 0)
+fit.treated <- filter(fit, dmmfd == 1)
+
+ggplot() + geom_density(aes(x=fit.control$fvalues, linetype = '2')) +
+geom_density(aes(x=fit.treated$fvalues, linetype = '3')) +
+xlim(-.1,.6) +
+xlab("") +
+scale_linetype_discrete(name = "", labels = c("Control", "Treated")) + ggtitle("Control and Treated Densities")
+
+
+# Second Regression (Balanced)
+
+des1 <- svydesign(id = ~X,  weights = ~weight, data = hh_98.df)
+prog.lm <- svyglm(dmmfd ~ sexhead + agehead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + oil, 
+design=des1, family = quasibinomial(link = "probit"))   
+
+X <- prog.lm$fitted
+Tr <- hh_98.df$dmmfd
+Y <- hh_98.df$lexptot
+
+m.out <- Match(Tr = Tr, X = X, Y = Y, caliper = 0.001, M = 1, CommonSupport = TRUE)
+summary(m.out)
+
+fit <- prog.lm$data
+fit$fvalues <- prog.lm$fitted.values 
+
+fit.control <- filter(fit, dmmfd == 0)
+fit.treated <- filter(fit, dmmfd == 1)
+
+ggplot() + 
+geom_density(aes(x=fit.control$fvalues, linetype = '2')) +
+geom_density(aes(x=fit.treated$fvalues, linetype = '3')) +
+xlim(-.1,.6) +
+xlab("") +
+scale_linetype_discrete(name = "", labels = c("Control", "Treated")) + ggtitle("Control and Treated Densities")
+
+
+####################
+# Male Matching
+####################
+
+# Nearest Neighbor
+des1 <- svydesign(id = ~X,  weights = ~weight, data = hh_98.df)
+prog.lm <- svyglm(dmmfd ~ sexhead + agehead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + oil, 
+design=des1, family = quasibinomial(link = "probit"))   
+
+X <- prog.lm$fitted.values
+Tr <- hh_98.df$dmmfd
+Y <- hh_98.df$lexptot
+m.out <- Match(Tr = Tr, X = X, Y = Y, M = 1, caliper = 0.001, replace = TRUE)
+summary(m.out)
+
+
+# Stratification Matching
+
+m.out <- matchit(dmmfd ~ sexhead + agehead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + oil,
+data = hh_98.df, method = "nearest", distance = "probit", caliper = 0.001)
+summary(m.out)
+
+####################
+# Female Matching
+####################
+
+
+# Nearest Neighbor
+glm.female <- glm(dfmfd ~ sexhead + agehead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + oil, family = binomial, data = hh_98.df)
+X <- glm.female$fitted
+Tr <- hh_98.df$dmmfd
+Y <- hh_98.df$lexptot
+m.out <- Match(Tr = Tr, X = X, Y = Y, caliper = 0.001, M = 1, replace = TRUE)
+summary(m.out)
+
+
+psm_m.lm <- pscore(dmmfd ~ sexhead + agehead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + oil, 
+name.pscore = "pscore", data = hh_98.df, family = quasibinomial(link = "probit"))
+summary(psm_m.lm)
+
+mathc <- matchit(dmmfd ~ sexhead + agehead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + oil + egg, method = "nearest", data = hh_98.df)
+
+```
+
+
+#########3.Diff-in-Diff with PSM################
+
+
+```{r}
+
+############### Subset################
+
+
+# Simplest Implementation
+
+hh_9198.df <- mutate(hh_9198.df, exptot0=ifelse(year == 0, exptot, 0))
+hh_9198.df <- group_by(hh_9198.df,nh) %>% mutate(exptot91 = max(exptot0))
+hh_9198.df <- subset(hh_9198.df, year == 1)
+hh_9198.df <- mutate(hh_9198.df, lexptot91=ifelse(year == 1, log(1+exptot91), 0))
+hh_9198.df <- mutate(hh_9198.df, lexptot98=ifelse(year == 1, log(1+exptot), 0))
+hh_9198.df <- mutate(hh_9198.df, lexptot9891 = lexptot98-lexptot91)
+hh_9198.df <- ungroup(hh_9198.df)
 
 
 
+# Regression Implementation
 
+hh_9198.df <- mutate(hh_9198.df, lexptot = log(1 + exptot))
+hh_9198.df <- mutate(hh_9198.df, lnland = log(1 + hhland / 100))
+hh_9198.df <- mutate(hh_9198.df, dmmfd1=ifelse(dmmfd == 1 & year == 1, 1, 0))
+hh_9198.df <- group_by(hh_9198.df,nh) %>%
+  mutate(dmmfd98 = max(dmmfd1))
+hh_9198.df <- mutate(hh_9198.df, dfmfd1=ifelse(dfmfd == 1 & year == 1, 1, 0))
+hh_9198.df <- group_by(hh_9198.df,nh) %>%
+  mutate(dfmfd98 = max(dfmfd1))
+hh_9198.df <- mutate(hh_9198.df, dmmfdyr = dmmfd98*year)
+hh_9198.df <- mutate(hh_9198.df, dfmfdyr = dfmfd98*year)
+hh_9198.df <- ungroup(hh_9198.df)
+
+###########################
+# Diff-in-Diff Regression
+###########################
+
+# Basic Model
+
+lm <- lm(lexptot ~ year + dfmfd98 + dfmfdyr, data = hh_9198.df)
+summary(lm)
+
+# Basic Model with FE on nh
+
+lm <- lm(lexptot ~ year + dfmfdyr + dfmfd98 + factor(nh), data = hh_9198.df)
+summary(lm)
+
+#Check for multicolinearity
+  
+sqrt(vif(lm)) #Error in vif.default(lm) : there are aliased coefficients in the model
+  
+# Contains multicollinearity
+check <- alias(lm)   # Notice that dfmfd98 = -1, therefore highly correlated with dfmfdyr
+
+# Remove dfmfd98
+lm <- lm(lexptot ~ year + dfmfdyr + factor(nh), data = hh_9198.df)
+sqrt(vif(lm))
 
 
 
