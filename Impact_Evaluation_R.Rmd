@@ -15,6 +15,12 @@ library(ggplot2)
 library(VIF)# install this package by hands
 library(nonrandom)# Install this package by hands also install lme4 package.
 library(car)
+library(plm)
+library(AER)
+library(Matrix)
+library(np)
+library(SparseM)
+library(rddtools)#this packgage required Matrix, np, SparseM package
 ```
 
 
@@ -300,16 +306,233 @@ summary(lm)
 
 #Check for multicolinearity
   
-sqrt(vif(lm)) #Error in vif.default(lm) : there are aliased coefficients in the model
+#sqrt(vif(lm)) #Error in vif.default(lm) : there are aliased coefficients in the model
   
 # Contains multicollinearity
 check <- alias(lm)   # Notice that dfmfd98 = -1, therefore highly correlated with dfmfdyr
 
 # Remove dfmfd98
 lm <- lm(lexptot ~ year + dfmfdyr + factor(nh), data = hh_9198.df)
-sqrt(vif(lm))
+
+
+ # Second method for testing for multicollinearity kappa()
+test <- model.matrix(~ year + dfmfdyr + dfmfd98 + factor(nh), data = hh_9198.df)
+kappa(test)   # Output : 2.017073e+16
+
+#### Because of an extra large kappa, there is collinearity in our model and should be dealt with
+
+#### conditional number must be less than 30
+  
+summary(lm)
+ 
+# Using plm for fixed-effect
+
+lm <- plm(lexptot ~ year + dfmfdyr + dfmfd98 + nh, data = hh_9198.df, model = "within", index = "nh")
+summary(lm)
 
 
 
+###############
+# PSM with DD
+###############
+
+# Data setup
+
+hh_9198.df <- mutate(hh_9198.df, lnland = log(1 + hhland / 100))
+hh_9198.df <- mutate(hh_9198.df, dfmfd1=ifelse(dfmfd == 1 & year == 1, 1, 0))
+hh_9198.df <- group_by(hh_9198.df,nh) %>%
+  mutate(dfmfd98 = max(dfmfd1))
+hh_9198.df <- filter(hh_9198.df, year == 0)
+hh_9198.df$X <- 1:nrow(hh_9198.df)
+
+
+
+
+# First Regression (Unbalanced)
+
+des1 <- svydesign(id = ~X,  weights = ~weight, data = hh_9198.df)
+prog.lm <- svyglm(dfmfd98 ~ sexhead + agehead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + oil, 
+                  design=des1, family = quasibinomial(link = "probit"))   
+
+X <- prog.lm$fitted
+Tr <- hh_9198.df$dfmfd
+
+m.out <- Match(Tr = Tr, X = X, caliper = 0.01)
+summary(m.out)
+
+MatchBalance(dfmfd98 ~ sexhead + agehead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + oil, data = hh_9198.df, nboots = 1000)
+
+#Graph density of propensity scores
+fit <- prog.lm$data
+fit$fvalues <- prog.lm$fitted.values 
+
+fit.control <- filter(fit, dfmfd == 0)
+fit.treated <- filter(fit, dfmfd == 1)
+
+ggplot() + 
+  geom_density(aes(x=fit.control$fvalues, linetype = '2')) +
+  geom_density(aes(x=fit.treated$fvalues, linetype = '3')) +
+  xlim(-.3,1) +
+  xlab("") +
+  scale_linetype_discrete(name = "", labels = c("Control", "Treated")) +
+  ggtitle("Control and Treated Densities")
+
+
+# Build data frame with ps and nh, then drop ps not matched
+ps_dropped <- m.out$index.dropped
+ps_hh_9198.df <- data.frame(psm = prog.lm$fitted.values)
+ps_hh_9198.df$nh <- prog.lm$data$nh
+ps_hh_9198.df <- ps_hh_9198.df[-ps_dropped,]
+rownames(ps_hh_9198.df) <- NULL
+
+#Merge to original data frame by nh
+hh_9198.df <- read.csv("Data/hh_9198.csv")
+psm_hh_9198.df <- right_join(hh_9198.df, ps_hh_9198.df, by = "nh")
+
+# Re-estimate baseline model with matched data set
+
+psm_hh_9198.df <- mutate(psm_hh_9198.df, lexptot = log(1 + exptot))
+psm_hh_9198.df <- mutate(psm_hh_9198.df, lnland = log(1 + hhland / 100))
+psm_hh_9198.df <- mutate(psm_hh_9198.df, dfmfd1=ifelse(dfmfd == 1 & year == 1, 1, 0))
+psm_hh_9198.df <- group_by(psm_hh_9198.df,nh) %>%
+  mutate(dfmfd98 = max(dfmfd1))
+psm_hh_9198.df <- mutate(psm_hh_9198.df, dfmfdyr = dfmfd98*year)
+psm_hh_9198.df <- ungroup(psm_hh_9198.df)
+
+# Re-estimate Basic Model
+
+lm <- lm(lexptot ~ year + dfmfd98 + dfmfdyr, data = psm_hh_9198.df)
+summary(lm)
+
+# Create Analytical Weights
+
+psm_hh_9198.df$a_weight <- 1
+psm_hh_9198.df$a_weight <- ifelse(psm_hh_9198.df$dfmfd == 0, psm_hh_9198.df$psm/(1-psm_hh_9198.df$psm), 1)
+
+# Re-estimate with analytical weights
+
+lm <- lm(lexptot ~ year + dfmfd98 + dfmfdyr, data = psm_hh_9198.df, weights = a_weight)
+summary(lm)
+```
+
+
+***4.Instrumental variables***
+
+
+```{r}
+# Recode Variables
+
+hh_98.df <- mutate(hh_98.df, lexptot = log(1 + exptot))
+hh_98.df <- mutate(hh_98.df, lnland = log(1 + hhland / 100))
+hh_98.df <- mutate(hh_98.df, vill = thanaid*10 + villid)
+hh_98.df <- group_by(hh_98.df, vill) %>%
+  mutate(villmmf = max(dmmfd))
+hh_98.df <- mutate(hh_98.df, mchoice = ifelse(villmmf == 1 & hhland < 50, 1, 0))
+var <- c("agehead", "sexhead", "educhead", "lnland", "vaccess", "pcirr", "rice", "wheat", "milk", "potato", "egg", "oil")
+for (i in 1:length(var)) hh_98.df[[paste("mch", var[[i]], sep = "")]] <- hh_98.df$mchoice*hh_98.df[[var[[i]]]]
+hh_98.df <- group_by(hh_98.df, vill) %>%
+  mutate(villfmf = max(dfmfd))
+hh_98.df <- mutate(hh_98.df, fchoice = ifelse(villfmf == 1 & hhland < 50, 1, 0))
+for (i in 1:length(var)) hh_98.df[[paste("fch", var[[i]], sep = "")]] <- hh_98.df$fchoice*hh_98.df[[var[[i]]]]
+
+
+#########################################################################################
+#----------------------------------------------------------------------------------------
+# Estimation without interaction terms while just using fchoice as an instrument
+#----------------------------------------------------------------------------------------
+#########################################################################################
+
+# First Stage
+fsls <- lm(dfmfd ~ agehead + sexhead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + egg + oil + fchoice, data = hh_98.df)
+summary(fsls)
+
+# Omit potato because of collinearity
+
+ivreg <- ivreg(lexptot ~ dfmfd + agehead + sexhead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + egg + oil | agehead + sexhead + educhead + lnland + vaccess + pcirr + rice + wheat + milk +  egg + oil + fchoice, data = hh_98.df)                   
+summary(ivreg)
+
+# Diagnostic Tests
+
+summary(ivreg, vcov = sandwich, df = Inf, diagnostics = TRUE)
+
+
+#####################################################
+#---------------------------------------------------
+# Female Participation with instrument interactions
+#---------------------------------------------------
+#####################################################
+
+# First Stage Least Squares
+
+fsls <- lm(dfmfd ~ agehead + sexhead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + potato + egg + 
+oil + fchoice + fchagehead + fchsexhead + fcheduchead + fchlnland + fchvaccess + fchpcirr + fchrice + fchwheat + fchmilk + fchegg + fchoil, data = hh_98.df)
+summary(fsls)
+
+# Second Stage
+
+# Ommit potato because of collinearity in the model as shown in FSLS)
+
+ivreg2 <- ivreg(lexptot ~ dfmfd + agehead + sexhead + educhead + lnland + vaccess + pcirr + rice + wheat + milk + egg + oil + fchoice| agehead + sexhead + educhead + lnland + vaccess + pcirr + rice + wheat + milk +  
+                 egg + oil + fchoice  + fchagehead + fchsexhead + fcheduchead + fchlnland + fchvaccess + fchpcirr + fchrice + fchwheat + fchmilk + fchegg + fchoil, data = hh_98.df)                   
+summary(ivreg2)
+
+# Diagnostic Tests
+
+summary(ivreg2, vcov = sandwich, df = Inf, diagnostics = TRUE)
+
+```
+
+
+***5.Regression Discontinuity***
+
+
+```{r}
+# Subsetting
+
+hh_98.df <- filter(hh_98.df, hhland <= 500)
+
+# Because of package design, no need to drop because sharp is determined
+#hh_98.df <- filter(hh_98.df, hhland >= 50 & dmmfd == 0 | dfmfd == 0)
+#hh_98.df <- filter(hh_98.df, hhland < 50 & dmmfd == 1 | dfmfd == 1)
+
+hh_98.df$lexptot <- log(1+hh_98.df$exptot) 
+hh_98.df$lnland <- log(1+hh_98.df$hhland/100)
+
+# Probability distribution for treated males and females 
+males_hh_98.df <- filter(hh_98.df, dmmfd == 1 | dmmfd == 0)
+males_hh_98.df <- filter(hh_98.df, dfmfd == 1 )
+
+ggplot(hh_98.df, aes(x=dmmfd)) + geom_density() + ggtitle("Males Density of Treatment") + xlim(-.5,1.5)
+ggsave("male_density.png", width = 3, height = 3)  
+ggplot(hh_98.df, aes(x=dfmfd)) + geom_density() + ggtitle("Females Density of Treatment") + xlim(-.5,1.5)
+ggsave("female_density.png", width = 3, height = 3)  
+
+
+# Setup
+data <- RDDdata(y = hh_98.df$lexptot, x = hh_98.df$hhland, cutpoint = 50)
+
+# Local linear polynomial regression (Imbens and Kalyanaraman 2012 bandwidth)
+data2 <- RDDbw_IK(data)
+rd2.lm <- RDDreg_np(RDDobject = data, bw = data2)
+print(rd2.lm)
+plot(rd2.lm, xlab = "", ylab = "", cex = .2)
+abline(v = 50)
+
+# Parametric 2nd order polynomial
+rd.lm <- RDDreg_lm(RDDobject = data, order = 2)
+plot(rd.lm, xlab = "", ylab = "", cex = .2)
+abline(v = 50)
+
+# Bootstrapping
+library(boot)
+
+# Function to run RDDreg_lm for bootstrapping
+rd <- function(data, i) {
+  d <- data[i, ]
+  r <- RDDdata(y = d$lexptot, x = d$hhland, cutpoint = 50)
+  d2 <- RDDbw_IK(r)
+  fit <- RDDreg_np(RDDobject = r, bw = d2)
+  return(fit$coefficients)
+}
 ```
 
