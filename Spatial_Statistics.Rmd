@@ -1,0 +1,180 @@
+---
+title: "Spatial Statistics for Data Science"
+author: "ERNESTOGith"
+date: "2023-10-07"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+**1.Types of spatial data**
+
+***1.1 Areal data ***
+
+```{r}
+# To install stringi package by hands for Rmarkdown. Installing sf package required prior installed Rtools.
+library(sf)
+library(mapview)
+library(stringi)
+d <- st_read(system.file("shape/nc.shp", package = "sf"),
+             quiet = TRUE)
+mapview(d, zcol = "SID74")
+
+```
+
+```{r}
+library(spData)
+library(ggplot2)
+d <- st_read(system.file("shapes/columbus.shp", package = "spData"), quiet = TRUE)
+ggplot(d) + geom_sf(aes(fill = INC))
+
+```
+
+```{r}
+library(terra)
+d <- rast(system.file("ex/elev.tif", package = "terra"))
+plot(d)
+```
+
+***1.2 Geostatistical data ***
+
+```{r}
+library(sp)
+library(sf)
+library(mapview)
+
+data("meuse")
+meuse <- st_as_sf(meuse, coords = c("x", "y"),  
+                  crs = 28992)
+mapview(meuse, zcol = "lead", map.types = "CartoDB.Voyager")
+```
+
+```{r}
+library(spData)#To access larger datasets in this package,install the spDataLarge package with
+install.packages('spDataLarge',repos='https://nowosad.github.io/drat/',type='source')
+
+mapview(properties, zcol = "prpsqm")
+```
+
+
+```{r}
+library(malariaAtlas)
+#d <- getPR(country = "Zimbabwe", species = "BOTH")
+#ggplot2::autoplot(d)
+
+```
+
+
+```{r}
+library(spatstat)
+plot(clmfires, use.marks = FALSE, pch = ".")
+plot(hamster)
+```
+
+```{r}
+library(sparr)
+data(pbc)
+plot(unmark(pbc[which(pbc$marks == "case"), ]), main = "cases")
+axis(1)
+axis(2)
+title(xlab = "Easting", ylab = "Northing")
+plot(unmark(pbc[which(pbc$marks == "control"), ]), pch = 3, main = "controls")
+axis(1)
+axis(2)
+title(xlab = "Easting", ylab = "Northing")
+```
+
+```{r}
+library(SpatialEpiApp)
+library(sf)
+library(ggplot2)
+library(viridis)
+
+# map
+f <- file.path("SpatialEpiApp/data/Ohio/fe_2007_39_county/", "fe_2007_39_county.shp")
+pathshp <- system.file(f, package = "SpatialEpiApp")
+map <- st_read(pathshp, quiet = TRUE)
+
+
+# data
+namecsv <- "SpatialEpiApp/data/Ohio/dataohiocomplete.csv"
+d <- read.csv(system.file(namecsv, package = "SpatialEpiApp"))
+
+# data are disaggregated by gender and race
+# aggregate to get population in each county and year
+d <- aggregate(x = d$n, by = list(county = d$NAME, year = d$year), FUN = sum)
+names(d) <- c("county", "year", "population")
+
+# join map and data
+mapst <- dplyr::left_join(map, d, by = c("NAME" = "county"))
+
+# map population by year
+# facet_wrap() splits data into subsets and create multiple plots
+ggplot(mapst, aes(fill = log(population))) + geom_sf() + 
+facet_wrap(~ year, ncol = 7) + scale_fill_viridis("log(population)") +
+theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks = element_blank())
+
+```
+
+
+
+
+```{r}
+library(sf)
+library(geoFourierFDA)
+library(rnaturalearth)
+library(rnaturalearthhires)#installed by hands
+library(ggplot2)
+
+
+# Map Canada
+map <- rnaturalearth::ne_states("Canada", returnclass = "sf")
+
+# Coordinates of stations
+d <- data.frame(canada$m_coord)
+d$location <- attr(canada$m_coord, "dimnames")[[1]]
+d <- st_as_sf(d, coords = c("W.longitude", "N.latitude"))
+st_crs(d) <- 4326
+
+# Plot Canada map and location of stations
+ggplot(map) + geom_sf() + geom_sf(data = d, size = 6) +
+geom_sf_label(data = d, aes(label = location), nudge_y = 2)
+
+# Temperature of each station over time
+d <- data.frame(canada$m_data)
+d$time <- 1:nrow(d)
+
+# Pivot data d from wide to long
+# cols: columns to pivot in longer format
+# names_to: name of new column with column names of original data
+# values_to: name of new column with values of original data
+df <- tidyr::pivot_longer(data = d, cols = names(d)[-which(names(d) == "time")], names_to = "variable", values_to = "value")
+
+# Plot temperature of each station over time
+ggplot(df, aes(x = time, y = value)) +
+geom_line(aes(color = variable))
+```
+
+```{r}
+library(epiflows)
+library(igraph)#This package is required to allow epiflows package runs
+
+data("Brazil_epiflows")
+
+loc <- merge(x = YF_locations, y = YF_coordinates, by.x = "location_code", by.y = "id", sort = FALSE)
+
+ef <- make_epiflows(flows = YF_flows, locations = loc,
+                    coordinates = c("lon", "lat"),
+                    pop_size = "location_population",
+                    duration_stay = "length_of_stay",
+                    num_cases = "num_cases_time_window",
+                    first_date = "first_date_cases",
+                    last_date = "last_date_cases")
+
+
+
+vis_epiflows(ef)
+map_epiflows(ef)
+```
+
