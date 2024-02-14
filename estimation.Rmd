@@ -1,0 +1,227 @@
+---
+title: "estimation_Chris"
+author: "ERNESTOGith"
+date: "2024-02-01"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+**1.Import of data**
+
+```{r}
+library(forecast)
+library(zoo)
+library(ggplot2)
+library(vars)
+library(urca)
+library(bruceR)
+library(tsDyn)
+myData <- read.table("E:\\CHRIS\\estimation\\myBase.csv", header = TRUE, sep = ";", dec = ",")
+```
+
+
+
+**2.chronograms**
+
+```{r}
+
+#Drawing the chronogram of the rate of growth
+
+ts(myData$taux_xce, start = 1993, frequency = 1)
+
+autoplot(as.zoo(myData$taux_xce), geom = "line") +
+ylab("taux_xce")+
+xlab("Années")+
+ggtitle("Chronogram of time series of the rate of growth")+
+geom_hline(yintercept = mean(myData$taux_xce),color = "red")
+
+
+#Drawing the chronogram of the rate of inflation 
+
+ts(myData$taux_inflation, start = 1993, frequency = 1)
+
+autoplot(as.zoo(myData$taux_inflation), geom = "line") +
+ylab("taux_inflation")+
+xlab("Années")+
+ggtitle("Chronogram of time series of the rate of inflation ")+
+geom_hline(yintercept = mean(myData$taux_inflation),color = "red")
+
+
+#Drawing the chronogram of the national saving rate
+
+ts(myData$taux_epargne_nationale, start = 1993, frequency = 1)
+
+autoplot(as.zoo(myData$taux_epargne_nationale), geom = "line") +
+ylab("taux_epargne_nationale")+
+xlab("Années")+
+ggtitle("Chronogramm of the national saving rate ")+
+geom_hline(yintercept = mean(myData$taux_epargne_nationale),color = "red")
+
+
+
+#Drawing the chronogram of the rate of investment 
+
+ts(myData$taux_investissement, start = 1993, frequency = 1)
+
+autoplot(as.zoo(myData$taux_investissement), geom = "line") +
+ylab("taux_investissemen")+
+xlab("Années")+
+ggtitle("Chronogram of the time series of the rate of investment ")+
+geom_hline(yintercept = mean(myData$taux_investissement),color = "red")
+
+
+
+
+#Drawing the chronogram of the current account balance
+
+ts(myData$solde_cpte_courant, start = 1993, frequency = 1)
+
+autoplot(as.zoo(myData$solde_cpte_courant), geom = "line") +
+ylab("solde_cpte_courant")+
+xlab("Années")+
+ggtitle("Chronogram of the current account balance")+
+geom_hline(yintercept = mean(myData$solde_cpte_courant),color = "red")
+
+
+
+#Drawing chronogram of the population growth rate 
+
+ts(myData$taux_accro_pop, start = 1993, frequency = 1)
+
+autoplot(as.zoo(myData$taux_accro_pop), geom = "line") +
+ylab("taux_accro_pop")+
+xlab("Années")+
+ggtitle("Chronogram of the time series of the population growth rate")+
+geom_hline(yintercept = mean(myData$taux_accro_pop),color = "red")
+
+
+#Drawing chronogram of the rate of unemployment
+
+ts(myData$taux_chomage, start = 1993, frequency = 1)
+
+autoplot(as.zoo(myData$taux_chomage), geom = "line") +
+ylab("taux_chomage")+
+xlab("Années")+
+ggtitle("Chronogram of the time series of the rate of unemployment ")+
+geom_hline(yintercept = mean(myData$taux_chomage),color = "red")
+
+```
+
+
+###3.ADF-Tests
+
+```{r}
+####Conversion into time series#######
+TsmyData <- ts(myData, start = 1993, frequency = 1)
+```
+
+
+```{r}
+adf1 <- summary(ur.df(TsmyData[,  "taux_xce"], type = "drift", lags = 1))
+adf1
+
+adf2 <-summary(ur.df(diff(TsmyData[, "taux_xce"]), type = "drift", lags = 1))
+adf2
+```
+
+
+```{r}
+adf3 <- summary(ur.df(TsmyData[,  "taux_inflation"], type = "drift", lags = 1))
+adf3
+
+```
+
+
+
+```{r}
+adf4 <- summary(ur.df(TsmyData[,  "taux_epargne_nationale"], type = "drift", lags = 1))
+adf4
+
+adf5 <-summary(ur.df(diff(TsmyData[, "taux_epargne_nationale"]), type = "drift", lags = 1))
+adf5
+```
+
+
+```{r}
+adf6 <- summary(ur.df(TsmyData[,  "taux_investissement"], type = "drift", lags = 1))
+adf6
+```
+
+
+```{r}
+adf7 <- summary(ur.df(TsmyData[,  "solde_cpte_courant"], type = "drift", lags = 1))
+adf7
+
+adf8 <-summary(ur.df(diff(TsmyData[, "solde_cpte_courant"]), type = "drift", lags = 1))
+adf8
+```
+
+
+```{r}
+adf9 <- summary(ur.df(TsmyData[,  "taux_accro_pop"], type = "drift", lags = 1))
+adf9
+
+adf10 <-summary(ur.df(diff(TsmyData[, "taux_accro_pop"]), type = "drift", lags = 1))
+adf10
+```
+
+
+
+```{r}
+adf11 <- summary(ur.df(TsmyData[,  "taux_chomage"], type = "drift", lags = 1))
+adf11
+
+adf12 <-summary(ur.df(diff(TsmyData[, "taux_chomage"]), type = "drift", lags = 1))
+adf12
+```
+
+
+```{r}
+###################################################
+### Lag-order selection
+###################################################
+VARselect(TsmyData, lag.max = 7, type = "const")
+```
+
+```{r}
+###################################################
+### VECM
+###################################################
+
+vecm.p2 <- summary(ca.jo(TsmyData, type = "trace", ecdet = "const", K = 2, spec = "transitory")) 
+vecm.p2
+
+```
+
+
+```{r}
+###################################################
+### VECM r = 3
+###################################################
+vecm <- ca.jo(TsmyData, type = "trace", ecdet = "trend", K = 2, spec = "transitory") 
+vecm.r3 <- cajorls(vecm, r = 3)
+vecm.r3
+```
+
+```{r}
+####Granger causality test
+
+VARselect(TsmyData)
+vm = VAR(TsmyData, p=2)
+model_summary(vm)
+granger_causality(vm)
+
+```
+
+
+
+```{r}
+####Impulse Response Fonction(IRF)
+mod_vec <- VECM(TsmyData, lag = 2 )
+io <-irf(mod_vec, impulse = "solde_cpte_courant", response = c("taux_xce", "taux_inflation", "taux_epargne_nationale",  "taux_investissement", "taux_accro_pop", "taux_chomage"), boot = TRUE)
+plot(io)
+```
+
+
